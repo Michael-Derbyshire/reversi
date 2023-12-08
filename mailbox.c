@@ -15,9 +15,13 @@ static mailbox *freelist = NULL;  /* list of free mailboxes.  */
 
 static mailbox *mailbox_config (mailbox *mbox, mailbox *prev)
 {
-  mbox->data.result = 0;
-  mbox->data.move_no = 0;
-  mbox->data.positions_explored = 0;
+  /* Initialise both the in and out values for the mailbox first. */
+  mbox->in = 0;
+  mbox->out = 0;
+  /* Base code below. */
+  mbox->data->result = 0;
+  mbox->data->move_no = 0;
+  mbox->data->positions_explored = 0;
   mbox->prev = prev;
   mbox->item_available = multiprocessor_initSem (0);
   mbox->space_available = multiprocessor_initSem (1);
@@ -88,7 +92,17 @@ mailbox *mailbox_kill (mailbox *mbox)
 
 void mailbox_send (mailbox *mbox, int result, int move_no, int positions_explored)
 {
-  /* your code goes here.  */
+  /* Adds functionality to the mailbox to allow the sending of data. */
+  multiprocessor_wait(mbox->space_available);                   // Waits for space to be available.
+  multiprocessor_wait(mbox->mutex);                             // Waits for the mailbox to be accessible.
+  /* Adds different points of data into the buffer. */
+  mbox->data[mbox->in].result = result;                         // Result of the current go.
+  mbox->data[mbox->in].move_no = move_no;                       // The move number of the current go.
+  mbox->data[mbox->in].positions_explored = positions_explored; // The number of positions that have been explored in total.
+  mbox->in = (mbox->in + 1) % MAX_MAILBOX_DATA;
+  /* Adds the items into the mailbox buffer. */
+  multiprocessor_signal(mbox->mutex);
+  multiprocessor_signal(mbox->item_available);
 }
 
 
@@ -100,5 +114,15 @@ void mailbox_send (mailbox *mbox, int result, int move_no, int positions_explore
 void mailbox_rec (mailbox *mbox,
 		  int *result, int *move_no, int *positions_explored)
 {
-  /* your code goes here.  */
+  /* Adds functionality to the the the recieving of data and items in the mailbox. */
+  multiprocessor_wait(mbox->item_available);
+  multiprocessor_wait(mbox->mutex);
+  /* Removes data and items from the buffer. */
+  *result = mbox->data[mbox->out].result;                          // Pulls the results from mailbox.
+  *move_no = mbox->data[mbox->out].move_no;                        // Pulls the move number from mailbox.
+  *positions_explored = mbox->data[mbox->out].positions_explored;  // Pulls the positions explored from the mailbox.
+  mbox->out = (mbox->out + 1) % MAX_MAILBOX_DATA;
+  /* Updates items in the mailbox buffer. */
+  multiprocessor_signal(mbox->mutex);
+  multiprocessor_signal(mbox->space_available); 
 }

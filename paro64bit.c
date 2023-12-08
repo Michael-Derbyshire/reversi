@@ -356,7 +356,7 @@ static int enterMove (void)
 
 
 #if 0
-  /*       R   L   U   D  LD RU  LU  RD */
+    /*     R   L   U   D  LD RU  LU  RD */
   makeMove(Colours, Used, 21, 1, NULL, NULL,
 	   23, 16, 61, 5, 3, 39, 56, 7);
 
@@ -688,7 +688,29 @@ int parallelSearch (int *totalExplored, int *move,
 		    int best, int *l, int noOfMoves,
 		    BITSET64 c, BITSET64 u, int noPlies, int o, int minscore, int maxscore)
 {
-  /* your code goes here.  */
+  /* To complete the parallel search, multiple children from the forks need to search the game tree in parallel.
+     This search needs to continue until fully searched, if there's a core available for it. Each fork needs
+     to return back to the parent, and then chooses the best move available.  */
+  int pid = fork();
+  // Detects if process is a child process after forking.
+  if (pid == 0)
+  {
+    // Makes the children check each move on a separate core.
+    for (int i = 0; i < noOfMoves; i++)
+    {
+      multiprocessor_wait(processorAvailable); // Waits for a processor to become available. Limiting the number of calls that are running.
+      if (fork() == 0)
+      {
+        int move_score = alphaBeta(l[i], c, u, noPlies, o, minscore, maxscore); // Use alphaBeta to search the move 'i'.
+
+
+        mailbox_send(barrier, move_score, i, positionsExplored);
+        multiprocessor_signal(processorAvailable);
+        exit(0);
+      }
+    }
+    exit(0);
+  }
 }
 #endif
 
@@ -818,7 +840,7 @@ int main()
   setupIPC ();
 #endif
 
-  // setupTest();
+  setupTest();
   setup();
 
   f = 0;
